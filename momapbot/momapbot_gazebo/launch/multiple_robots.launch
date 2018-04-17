@@ -1,0 +1,40 @@
+<launch>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find momapbot_gazebo)/worlds/momapbot.world"/>
+  </include>
+
+  <!-- No namespace here as we will share this description. Access with slash at the beginning -->
+  <param name="robot_description"
+    command="$(find xacro)/xacro.py $(find momapbot_description)/urdf/momapbot.xacro" />
+
+  
+
+  <!-- BEGIN ROBOT 1-->
+  <group ns="robot1">
+
+    <node name="model_state_publisher" pkg="momapbot_gazebo" type="modelstatepublisher.py"/>
+
+    <param name="tf_prefix" value="robot1" />
+    <include file="$(find momapbot_gazebo)/launch/momapbot.launch" >
+      <arg name="init_pose" value="-x 0 -y 0 -z 0" />
+      <arg name="robot_name"  value="robot1" />
+    </include>
+    <include file="$(find momapbot_control)/launch/momapbot_control.launch"/>
+    <node name="velocity_controller" pkg="momapbot_control" type="velocity_controller.py" output="screen"/>
+  </group>
+
+  <!-- BEGIN ROBOT 2-->
+  <group ns="robot2">
+
+    <node name="model_state_publisher" pkg="momapbot_gazebo" type="modelstatepublisher.py"/>
+
+    <param name="tf_prefix" value="robot2" />
+    <include file="$(find momapbot_gazebo)/launch/momapbot.launch" >
+      <arg name="init_pose" value="-x -15 -y 15 -z 0" />
+      <arg name="robot_name"  value="robot2" />
+    </include>
+  <include file="$(find momapbot_control)/launch/momapbot_control.launch"/>
+  <node name="velocity_controller" pkg="momapbot_control" type="velocity_controller.py" output="screen"/>
+  </group>
+</launch>
