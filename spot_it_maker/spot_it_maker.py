@@ -70,20 +70,25 @@ class SpotItMaker():
 
         
     def get_image_numbers_for_cards(self,p):
-        # for min_factor in range(2, 1 + int(p ** 0.5)):
-        #     if p % min_factor == 0:
-        #         break
-        # else:
-        #     min_factor = p
         cards = []
         for i in range(p):
-            cards.append(([i * p + j for j in range(p)] + [p * p]))
+            card = []
+            for j in range(p):
+                card.append(i * p + j)
+            cards.append(card+[p*p])
+            # cards.append(([i * p + j for j in range(p)] + [p * p]))
         for i in range(p):
             for j in range(p):
-                cards.append(([k * p + (j + i * k) % p
-                    for k in range(p)] + [p * p + 1 + i]))
-
-        cards.append(([p * p + i for i in range(p + 1)]))
+                card = []
+                for k in range(p):
+                    card.append(k * p + (j + i * k) % p)
+                cards.append(card+[p*p+1+i])
+                # cards.append(([k * p + (j + i * k) % p for k in range(p)] + [p * p + 1 + i]))
+        card = []
+        for i in range(p+1):
+            card.append(p * p + i )
+        cards.append(card)
+        # cards.append(([p * p + i for i in range(p + 1)]))
         return cards
     
     def create_cards(self):
