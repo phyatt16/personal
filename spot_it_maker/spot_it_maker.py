@@ -8,6 +8,16 @@ class SpotItMaker():
         self.source_dir = source_dir
         self.out_dir = out_dir
         self.files = os.listdir(source_dir)
+        num_pics_in_folder = len(self.files)
+        print "Found ",num_pics_in_folder," pictures in folder"
+        prime_numbers = [1,2,3,5,7,11,13,17,19,23,29,31]
+        for i in range(0,len(prime_numbers)):
+            number_of_pics = len(self.get_image_numbers_for_cards(prime_numbers[i]))
+            if number_of_pics > num_pics_in_folder:
+                i -= 1
+                break
+        self.img_number_array = self.get_image_numbers_for_cards(prime_numbers[i])
+        print "Making ",len(self.img_number_array)," cards with ",prime_numbers[i]+1," images each"
 
     def scale_image_to_have_max_dimension(self,img,maxdim):
         new_xsize = img.shape[0]*maxdim/float(np.max(img.shape))
@@ -60,35 +70,38 @@ class SpotItMaker():
 
         
     def get_image_numbers_for_cards(self,p):
-        for min_factor in range(2, 1 + int(p ** 0.5)):
-            if p % min_factor == 0:
-                break
-        else:
-            min_factor = p
+        # for min_factor in range(2, 1 + int(p ** 0.5)):
+        #     if p % min_factor == 0:
+        #         break
+        # else:
+        #     min_factor = p
         cards = []
         for i in range(p):
             cards.append(([i * p + j for j in range(p)] + [p * p]))
-        for i in range(min_factor):
+        for i in range(p):
             for j in range(p):
                 cards.append(([k * p + (j + i * k) % p
                     for k in range(p)] + [p * p + 1 + i]))
 
-        cards.append(([p * p + i for i in range(min_factor + 1)]))
+        cards.append(([p * p + i for i in range(p + 1)]))
         return cards
     
     def create_cards(self):
-        img_number_array = self.get_image_numbers_for_cards(7)
 
         self.cards = []
-        for i in xrange(0,len(img_number_array)):
-            self.cards.append(self.create_one_card(img_number_array[i]))
-            print "Made card: ",i
+        for i in xrange(0,len(self.img_number_array)):
+            self.cards.append(self.create_one_card(self.img_number_array[i]))
+            print "Made card: ",i+1
 
     def preview_cards(self):
         for i in xrange(0,len(self.cards)):
             cv2.imshow('card'+str(i),self.cards[i])
             cv2.waitKey(1)
         cv2.waitKey(0)
+        
+    def save_cards(self):
+        for i in xrange(0,len(self.cards)):
+            cv2.imwrite(self.out_dir+'card_'+str(i)+'.png',self.cards[i])
 
 
 if __name__=='__main__':
@@ -98,6 +111,7 @@ if __name__=='__main__':
     maker = SpotItMaker(source_folder,destination_folder)
 
     maker.create_cards()
-    maker.preview_cards()
+    maker.save_cards()
+    # maker.preview_cards()
 
     
