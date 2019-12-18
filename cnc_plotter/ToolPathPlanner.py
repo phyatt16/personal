@@ -34,9 +34,9 @@ class ToolPathPlanner():
         
         self.img_converter = Image2CoverageMap(image_path)
         
-        self.image = self.img_converter.thresh_image
+        # self.image = self.img_converter.thresh_image
         # self.image = self.img_converter.bw_image        
-        # self.image = self.img_converter.edges
+        self.image = self.img_converter.edges
         self.xmin = 0
         self.ymin = 0
         self.xmax = self.image.shape[0]-1
@@ -59,13 +59,21 @@ class ToolPathPlanner():
         
         while found == False:
             radius += 1
+            # print radius
             
             xlower = np.max([x-radius,self.xmin])
             ylower = np.max([y-radius,self.ymin])
-            xupper = np.min([x+radius,self.xmax])
-            yupper = np.min([y+radius,self.ymax])            
+            xupper = np.min([x+radius,self.xmax+1])
+            yupper = np.min([y+radius,self.ymax+1])            
 
             search_region = self.to_be_covered_map[xlower:xupper,ylower:yupper]
+
+            # print xlower
+            # print xupper
+            # print ylower
+            # print yupper
+            # print "search region shape: ",search_region.shape
+            # print "image shape: ",self.image.shape            
 
             region_max = np.max(self.to_be_covered_map[xlower:xupper,ylower:yupper])
 
@@ -178,10 +186,10 @@ if __name__=='__main__':
     
 
     # filename = 'random_shapes2.png'
-    # filename = 'testpic.jpg'
+    filename = 'testpic.jpg'
     # filename = '8.png'
     # filename = 'words.png'
-    filename = 'fleur.png'
+    # filename = 'fleur.png'
     tool_diameter = 1
 
     planner = ToolPathPlanner(filename,tool_diameter)
