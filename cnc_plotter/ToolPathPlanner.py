@@ -6,17 +6,19 @@ import time
 class Image2CoverageMap():
     def __init__(self,image_filepath):
         self.color_image = cv2.imread(image_filepath)
-        self.color_image = self.scale_image_to_have_max_dimension(self.color_image,400)
+        self.color_image = self.scale_image_to_have_max_dimension(self.color_image,300)
         self.bw_image = cv2.cvtColor(self.color_image, cv2.COLOR_BGR2GRAY)
-        self.edges = cv2.Canny(self.color_image,100,150)
-        self.thresh_image = cv2.bitwise_not(cv2.adaptiveThreshold(self.bw_image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,11,2))
+        self.edges = cv2.Canny(self.color_image,150,300)
+        # self.thresh_image = cv2.bitwise_not(cv2.adaptiveThreshold(self.bw_image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,33,2))
+        ret, self.thresh_image = cv2.threshold(self.bw_image,127,255,cv2.THRESH_BINARY_INV)
+        self.bw_image = cv2.bitwise_not(cv2.cvtColor(self.color_image, cv2.COLOR_BGR2GRAY))
         
         cv2.imshow('Color image',self.color_image)
-        cv2.imshow('Greyscale image',self.bw_image)
-        cv2.imshow('Edges',self.edges)
-        cv2.imshow('Thresholded',self.thresh_image)        
+        # cv2.imshow('Greyscale image',self.bw_image)
+        # cv2.imshow('Edges',self.edges)
+        # cv2.imshow('Thresholded',self.thresh_image)        
 
-        cv2.waitKey(1)
+        cv2.waitKey(10)
 
     def scale_image_to_have_max_dimension(self,img,maxdim):
         new_xsize = img.shape[0]*maxdim/float(np.max(img.shape))
@@ -33,6 +35,7 @@ class ToolPathPlanner():
         self.img_converter = Image2CoverageMap(image_path)
         
         self.image = self.img_converter.thresh_image
+        # self.image = self.img_converter.bw_image        
         # self.image = self.img_converter.edges
         self.xmin = 0
         self.ymin = 0
@@ -49,6 +52,34 @@ class ToolPathPlanner():
         plt.pause(.0001)
         # raw_input('')
 
+    def find_nearest_pocket(self,x,y):
+        
+        found = False
+        radius = 1
+        
+        while found == False:
+            radius += 1
+            
+            xlower = np.max([x-radius,self.xmin])
+            ylower = np.max([y-radius,self.ymin])
+            xupper = np.min([x+radius,self.xmax])
+            yupper = np.min([y+radius,self.ymax])            
+
+            search_region = self.to_be_covered_map[xlower:xupper,ylower:yupper]
+
+            region_max = np.max(self.to_be_covered_map[xlower:xupper,ylower:yupper])
+
+            if region_max > 0:
+                found = True
+                
+                numCols = np.shape(search_region)[1]
+                idx = np.argmax(search_region)
+                r = (idx-idx%numCols)/numCols
+                c = np.argmax(search_region) - r*numCols
+
+        return xlower + r, ylower + c
+        
+
     def make_xy_in_bounds(self,x,y,theta,xmin,xmax,ymin,ymax):
         if(x > xmax or x < xmin):
             x = x - np.sin(theta)
@@ -57,124 +88,41 @@ class ToolPathPlanner():
 
         return int(round(x)),int(round(y))
 
-    # TODO - Streamline this...maybe a for loop over thetas with a break in case it finds something
-    # Make the thetas increment by 45 degrees to include diagonal travel
     def wall_follow_cw(self,x,y,theta,cmap):
         thetas = [3*np.pi/4, np.pi/2,np.pi/4, 0,-np.pi/4, -np.pi/2, -3*np.pi/4]
-        # thetas = [np.pi/2, np.pi, -np.pi/2, 0]        
+        # thetas = -np.array(thetas)
         for t in thetas:
             xnext = x + np.sin(theta+t)
             ynext = y + np.cos(theta+t)
             
-            xnext,ynext = self.make_xy_in_bounds(xnext,ynext,theta + t,self.xmin,self.xmax,self.ymin,self.ymax)
+            xnext,ynext = self.make_xy_in_bounds(xnext,ynext,theta+t,self.xmin,self.xmax,self.ymin,self.ymax)
             if((xnext!=x or ynext!=y) and cmap[xnext,ynext]>0):
                 return xnext, ynext, theta+t
 
-        return x,y,theta
+        return x,y,theta+t
             
-    
-    # def wall_follow_cw(self,x,y,theta,cmap):
-    #     # Check to the left
-    #     xnext = x + np.cos(theta + np.pi/2.0)
-    #     ynext = y + np.sin(theta + np.pi/2.0)
-    #     xnext,ynext = self.make_xy_in_bounds(xnext,ynext,theta + np.pi/2.0,self.xmin,self.xmax,self.ymin,self.ymax)
-
-    #     if((xnext!=x or ynext!=y) and cmap[xnext,ynext]>0):
-    #         return xnext, ynext, theta+np.pi/2.0
-
-    #     else:
-    #         # Check ahead
-    #         xnext = x + np.cos(theta)
-    #         ynext = y + np.sin(theta)
-    #         xnext,ynext = self.make_xy_in_bounds(xnext,ynext,theta,self.xmin,self.xmax,self.ymin,self.ymax)
-            
-    #         if((xnext!=x or ynext!=y) and cmap[xnext,ynext]>0):
-    #             return xnext, ynext, theta
-
-    #         else:
-    #             # Check to the right
-    #             xnext = x + np.cos(theta - np.pi/2.0)
-    #             ynext = y + np.sin(theta - np.pi/2.0)
-    #             xnext,ynext = self.make_xy_in_bounds(xnext,ynext,theta - np.pi/2.0,self.xmin,self.xmax,self.ymin,self.ymax)
-                
-    #             if((xnext!=x or ynext!=y) and cmap[xnext,ynext]>0):
-    #                 return xnext, ynext, theta-np.pi/2.0
-
-    #             else:
-    #                 # return zeros
-    #                 return int(round(x)), int(round(y)), theta
-
-
-    # TODO - Make it so this actually finds the nearest pocket...
-    def find_nearest_pocket(self,x,y):
-        search_map = np.ones(self.image.shape)
-        # search_map = np.zeros(self.image.shape)        
-        search_map[x,y] = 0
-        
-        found = False
-        theta = 0
-        
-        while found == False:
-            # Swirl outward
-            # plt.figure(3)
-            # plt.clf()
-            # self.visualize_coverage(search_map,3)
-            xnext,ynext,thetanext = self.wall_follow_cw(x,y,theta,search_map)
-            if(xnext!=x or ynext!=y or thetanext!=theta):
-                x = xnext
-                y = ynext
-                theta = thetanext
-                search_map[x,y] = 0
-            else:
-                # print "Resetting search map!"
-                # print "x ",x
-                # print "y ",y
-                # print "theta ",theta                
-                search_map = np.ones(self.image.shape)
-                # search_map[x,y] = 0
-                # x,y,theta = self.wall_follow_cw(x,y,theta,np.ones(search_map.shape))
-
-
-            # print "x: ",x
-            # print "y: ",y            
-            # print "theta: ",theta
-
-            if self.coverage_map[x,y] != self.image[x,y]:
-                found = True
-
-        # print "Found something"
-        return x,y,theta
-
-
-    # TODO - make it recognize diagonal pixels as part of the same pocket
-    def fill_pocket(self,pocket_x,pocket_y,pocket_theta,waypoints):
+    def fill_pocket(self,pocket_x,pocket_y,waypoints):
         x = pocket_x
         y = pocket_y
-        theta = pocket_theta
 
-        # thetas = [np.pi/4,np.pi/2, 3*np.pi/4, np.pi, -3*np.pi/4, -np.pi/2, -np.pi/4, 0 ]
-        thetas = [3*np.pi/4, np.pi/2,np.pi/4, 0,-np.pi/4, -np.pi/2, -3*np.pi/4]
-        # thetas = [np.pi/2,np.pi, 3*np.pi/2, 0, np.pi/4, 3*np.pi/4, 5*np.pi/4, 7*np.pi/4]
-        # for test_theta in thetas:
-            
-        #     xnext = x + np.sin(test_theta)
-        #     ynext = y + np.cos(test_theta)
-            
-        #     xnext,ynext = self.make_xy_in_bounds(xnext,ynext,test_theta,self.xmin,self.xmax,self.ymin,self.ymax)
-            
-        #     if(self.coverage_map[xnext,ynext] != self.image[xnext,ynext]):
-        #         theta = test_theta
-        #         break
-            
+        xlast = waypoints[-3][0]
+        ylast = waypoints[-3][1]
+        
+        theta = np.round(np.arctan2(x-xlast,y-ylast)/np.pi*4.0)*np.pi/4.0
+        
         while self.coverage_map[x,y] != self.image[x,y]:
             self.coverage_map[x,y] = self.image[x,y]
+            self.coverage_map[x,y] = 255
             self.to_be_covered_map = self.image-self.coverage_map
+            
             x,y,theta = self.wall_follow_cw(x,y,theta,self.to_be_covered_map)
             
             waypoints.append((x,y,0))
+            
             # plt.figure(2)
             # plt.clf()
             # self.visualize_coverage(self.coverage_map,2)
+            # time.sleep(.01)
 
         return waypoints,x,y
     
@@ -188,18 +136,20 @@ class ToolPathPlanner():
         z = self.z
         zup = 1
         zdown = 0
-        waypoints = []
+        waypoints = [[x,y,z]]
+        numPockets = 0
         
         while np.linalg.norm(self.coverage_map-self.image)>0:
             
             # print "finding new pocket"
-            pocket_x,pocket_y,pocket_theta = self.find_nearest_pocket(x,y)
+            pocket_x,pocket_y = self.find_nearest_pocket(x,y)
 
             waypoints.append((pocket_x,pocket_y,zup))
             waypoints.append((pocket_x,pocket_y,zdown))
 
             # print "filling pocket"
-            waypoints,x,y = self.fill_pocket(pocket_x,pocket_y,pocket_theta,waypoints)
+            waypoints,x,y = self.fill_pocket(pocket_x,pocket_y,waypoints)
+            numPockets += 1
 
             plt.figure(1)
             plt.clf()
@@ -215,6 +165,7 @@ class ToolPathPlanner():
         plt.clf()
         self.visualize_coverage(self.coverage_map,fignum=1)
         print "done"
+        print numPockets," pockets"
     
         
 
@@ -226,9 +177,11 @@ if __name__=='__main__':
     # b = Image2CoverageMap('8.png')
     
 
-    filename = 'random_shapes2.png'
+    # filename = 'random_shapes2.png'
     # filename = 'testpic.jpg'
     # filename = '8.png'
+    # filename = 'words.png'
+    filename = 'fleur.png'
     tool_diameter = 1
 
     planner = ToolPathPlanner(filename,tool_diameter)
