@@ -2,23 +2,21 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import pickle
 
 class Image2CoverageMap():
     def __init__(self,image_filepath):
+        self.filename = image_filepath
         self.color_image = cv2.imread(image_filepath)
-        self.color_image = self.scale_image_to_have_max_dimension(self.color_image,300)
-        self.bw_image = cv2.cvtColor(self.color_image, cv2.COLOR_BGR2GRAY)
-        self.edges = cv2.Canny(self.color_image,150,300)
-        # self.thresh_image = cv2.bitwise_not(cv2.adaptiveThreshold(self.bw_image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,33,2))
-        ret, self.thresh_image = cv2.threshold(self.bw_image,127,255,cv2.THRESH_BINARY_INV)
-        self.bw_image = cv2.bitwise_not(cv2.cvtColor(self.color_image, cv2.COLOR_BGR2GRAY))
-        
-        cv2.imshow('Color image',self.color_image)
-        # cv2.imshow('Greyscale image',self.bw_image)
-        # cv2.imshow('Edges',self.edges)
-        # cv2.imshow('Thresholded',self.thresh_image)        
 
-        cv2.waitKey(10)
+        max_dim = min(max(self.color_image.shape),1000)
+        self.color_image = self.scale_image_to_have_max_dimension(self.color_image,max_dim)
+        self.color_image = cv2.bilateralFilter(self.color_image,10,200,200)
+        
+        self.edges = cv2.Canny(self.color_image,50,100)
+
+        cv2.imshow('Edges',self.edges)
+        cv2.waitKey(100)
 
     def scale_image_to_have_max_dimension(self,img,maxdim):
         new_xsize = img.shape[0]*maxdim/float(np.max(img.shape))
@@ -33,9 +31,6 @@ class ToolPathPlanner():
         self.z = 0
         
         self.img_converter = Image2CoverageMap(image_path)
-        
-        # self.image = self.img_converter.thresh_image
-        # self.image = self.img_converter.bw_image        
         self.image = self.img_converter.edges
         self.xmin = 0
         self.ymin = 0
@@ -46,11 +41,8 @@ class ToolPathPlanner():
         self.to_be_covered_map = self.image-self.coverage_map
 
     def visualize_coverage(self,coverage_map,fignum=1):
-        plt.ion()
-        plt.matshow(coverage_map,fignum=fignum)
-        plt.show()
-        plt.pause(.0001)
-        # raw_input('')
+        cv2.imshow(str(fignum),coverage_map)
+        cv2.waitKey(100)        
 
     def find_nearest_pocket(self,x,y):
         
@@ -67,14 +59,6 @@ class ToolPathPlanner():
             yupper = np.min([y+radius,self.ymax+1])            
 
             search_region = self.to_be_covered_map[xlower:xupper,ylower:yupper]
-
-            # print xlower
-            # print xupper
-            # print ylower
-            # print yupper
-            # print "search region shape: ",search_region.shape
-            # print "image shape: ",self.image.shape            
-
             region_max = np.max(self.to_be_covered_map[xlower:xupper,ylower:yupper])
 
             if region_max > 0:
@@ -98,7 +82,6 @@ class ToolPathPlanner():
 
     def wall_follow_cw(self,x,y,theta,cmap):
         thetas = [3*np.pi/4, np.pi/2,np.pi/4, 0,-np.pi/4, -np.pi/2, -3*np.pi/4]
-        # thetas = -np.array(thetas)
         for t in thetas:
             xnext = x + np.sin(theta+t)
             ynext = y + np.cos(theta+t)
@@ -113,29 +96,51 @@ class ToolPathPlanner():
         x = pocket_x
         y = pocket_y
 
-        xlast = waypoints[-3][0]
-        ylast = waypoints[-3][1]
+        xlast = waypoints[-1][0]
+        ylast = waypoints[-1][1]
         
         theta = np.round(np.arctan2(x-xlast,y-ylast)/np.pi*4.0)*np.pi/4.0
+        pocket_waypoints = []
         
         while self.coverage_map[x,y] != self.image[x,y]:
-            self.coverage_map[x,y] = self.image[x,y]
             self.coverage_map[x,y] = 255
             self.to_be_covered_map = self.image-self.coverage_map
             
             x,y,theta = self.wall_follow_cw(x,y,theta,self.to_be_covered_map)
-            
-            waypoints.append((x,y,0))
-            
-            # plt.figure(2)
-            # plt.clf()
-            # self.visualize_coverage(self.coverage_map,2)
-            # time.sleep(.01)
+            pocket_waypoints.append((x,y,0))
 
-        return waypoints,x,y
+
+        if(len(pocket_waypoints)>10):
+            waypoints.append((pocket_x,pocket_y,1))
+            waypoints.append((pocket_x,pocket_y,0))
+            
+            for pt in pocket_waypoints:
+                waypoints.append(pt)
+
+            return waypoints,x,y
+        else:
+            return waypoints,pocket_x,pocket_y
+
+    def write_waypoints_to_file(self,filename):
+        with open(filename,'wb') as f:
+            pickle.dump(self.waypoints,f)
+
+    def read_waypoints_from_file(self,filename):
+        with open(filename,'rb') as f:
+            self.waypoints = pickle.load(f)
+            
     
     def generate_g_code(self,waypoints):
         pass
+
+    def preview_image_from_waypoints(self):
+        img = np.zeros(self.coverage_map.shape)
+        for pt in self.waypoints:
+            if(pt[2]==0):
+                img[pt[0],pt[1]] = 255
+
+        self.visualize_coverage(img,fignum=10)
+
 
     def plan_2d(self):
         
@@ -144,39 +149,25 @@ class ToolPathPlanner():
         z = self.z
         zup = 1
         zdown = 0
-        waypoints = [[x,y,z]]
+        self.waypoints = [[x,y,z]]
         numPockets = 0
         
         while np.linalg.norm(self.coverage_map-self.image)>0:
             
-            # print "finding new pocket"
             pocket_x,pocket_y = self.find_nearest_pocket(x,y)
 
-            waypoints.append((pocket_x,pocket_y,zup))
-            waypoints.append((pocket_x,pocket_y,zdown))
+            len_before_filling = len(self.waypoints)
+            self.waypoints,x,y = self.fill_pocket(pocket_x,pocket_y,self.waypoints)
+            if(len(self.waypoints)>len_before_filling):
+                numPockets += 1
 
-            # print "filling pocket"
-            waypoints,x,y = self.fill_pocket(pocket_x,pocket_y,waypoints)
-            numPockets += 1
-
-            plt.figure(1)
-            plt.clf()
-            self.visualize_coverage(self.coverage_map,fignum=1)
-
-            # plt.figure(2)
-            # plt.clf()
-            # self.to_be_covered_map = self.image-self.coverage_map
-            # self.visualize_coverage(self.to_be_covered_map,fignum=2)
+            # self.visualize_coverage(self.coverage_map,fignum=1)
+            self.preview_image_from_waypoints()
             
-
-        plt.figure(1)
-        plt.clf()
-        self.visualize_coverage(self.coverage_map,fignum=1)
+        self.preview_image_from_waypoints()
+        
         print "done"
         print numPockets," pockets"
-    
-        
-
 
         
 if __name__=='__main__':
@@ -185,18 +176,22 @@ if __name__=='__main__':
     # b = Image2CoverageMap('8.png')
     
 
-    # filename = 'random_shapes2.png'
-    filename = 'testpic.jpg'
-    # filename = '8.png'
-    # filename = 'words.png'
-    # filename = 'fleur.png'
+    filenames = ['random_shapes2.png','testpic.jpg','hyatt_sibs.jpg','ruthie.jpg','8.png','words.png','wagon_wheel.jpg']
+    # filenames = ['wagon_wheel.jpg']
+   
     tool_diameter = 1
 
-    planner = ToolPathPlanner(filename,tool_diameter)
+    for filename in filenames:
+        planner = ToolPathPlanner(filename,tool_diameter)    
+        planner.plan_2d()
+        planner.write_waypoints_to_file(filename[0:-4])
+        cv2.waitKey(-1)    
 
-    # Makes a list of waypoints (x,y,z)
-    planner.plan_2d()
 
-    time.sleep(100)
+    for filename in filenames:
+        planner = ToolPathPlanner(filename,tool_diameter)            
+        planner.read_waypoints_from_file(filename[0:-4])
+        planner.preview_image_from_waypoints()
+        cv2.waitKey(-1)
     
     # g_code = planner.generate_g_code()
